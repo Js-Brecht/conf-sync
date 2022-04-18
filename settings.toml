@@ -1,0 +1,22 @@
+[gdrive]
+app_folder = "conf-sync"
+
+[oauth]
+client_id = '1027981561013-a1a6e81mr4kdka5qr26n1i1ko2g34g29.apps.googleusercontent.com'
+client_secret = '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'
+project_id = 'psyched-canto-241101'
+auth_uri = 'https://accounts.google.com/o/oauth2/auth'
+token_uri = 'https://oauth2.googleapis.com/token'
+auth_provider_x509_cert_url = 'https://www.googleapis.com/oauth2/v1/certs'
+redirect_uris = [
+    'http://localhost'
+]
+scopes = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/drive.appdata",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive.install",
+    "https://www.googleapis.com/auth/userinfo.email"
+]

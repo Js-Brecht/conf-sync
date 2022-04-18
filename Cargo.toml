@@ -1,0 +1,28 @@
+[package]
+name = "conf-sync"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+keyring = "1.1.2"
+serde = { version = "1.0.117", features = ["derive"] }
+serde_json = "1.0.59"
+serde_derive = "1.0.136"
+toml = "0.5.8"
+confy = "0.3.1"
+config = "0.12.0"
+futures = "0.3"
+futures-locks = "0.7"
+tokio = { version = "1.17", features = ["full"] }
+google-drive3 = "*"
+hyper = "0.14"
+hyper-rustls = "0.23"
+yup-oauth2 = "6.4.0"
+webbrowser = "0.6.0"
+directories = "0.10.0"
+anyhow = "1.0.56"
+async-trait = "0.1.53"
+itertools = "0.10.3"
+seahash = "4.1.0"
