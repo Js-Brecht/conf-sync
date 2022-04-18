@@ -1,6 +1,7 @@
+use std::collections::hash_map::Values;
 use std::path::Path;
 use std::io;
-use std::collections::HashMap;
+use std::collections::{ HashMap };
 use serde::{Deserialize, Serialize};
 use yup_oauth2::storage::{
     TokenInfo,
@@ -15,7 +16,7 @@ enum FilterResponse {
 /// ScopeFilter represents a filter for a set of scopes. It can definitively
 /// prove that a given list of scopes is not a subset of another.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-struct ScopeFilter(u64);
+pub struct ScopeFilter(u64);
 
 impl ScopeFilter {
     /// Determine if this ScopeFilter could be a subset of the provided filter.
@@ -31,7 +32,7 @@ impl ScopeFilter {
 /// ScopeHash is a hash value derived from a list of scopes. The hash value
 /// represents a fingerprint of the set of scopes *independent* of the ordering.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-struct ScopeHash(u64);
+pub struct ScopeHash(pub u64);
 
 /// A set of scopes
 #[derive(Debug)]
@@ -94,11 +95,11 @@ where
 
 /// A single stored token.
 #[derive(Debug, Clone)]
-struct JSONToken {
-    scopes: Vec<String>,
-    token: TokenInfo,
-    hash: ScopeHash,
-    filter: ScopeFilter,
+pub struct JSONToken {
+    pub scopes: Vec<String>,
+    pub token: TokenInfo,
+    pub hash: ScopeHash,
+    pub filter: ScopeFilter,
 }
 
 impl Serialize for JSONToken {
@@ -140,9 +141,19 @@ impl<'de> Deserialize<'de> for JSONToken {
     }
 }
 
+pub type JSONTokensMap = HashMap<ScopeHash, JSONToken>;
+
 #[derive(Debug, Clone)]
 pub struct JSONTokens {
-    token_map: HashMap<ScopeHash, JSONToken>,
+    token_map: JSONTokensMap,
+}
+
+impl Default for JSONTokens {
+    fn default() -> JSONTokens {
+        JSONTokens {
+            token_map: HashMap::new(),
+        }
+    }
 }
 
 impl Serialize for JSONTokens {
@@ -176,7 +187,7 @@ impl<'de> Deserialize<'de> for JSONTokens {
                 while let Some(json_token) = access.next_element::<JSONToken>()? {
                     token_map.insert(json_token.hash, json_token);
                 }
-                Ok(JSONTokens { token_map })
+                Ok(JSONTokens { token_map, ..JSONTokens::default() })
             }
         }
 
@@ -188,14 +199,16 @@ impl<'de> Deserialize<'de> for JSONTokens {
 
 impl JSONTokens {
     pub fn new() -> Self {
-        JSONTokens {
-            token_map: HashMap::new(),
-        }
+        JSONTokens::default()
     }
 
     pub async fn load_from_file(filename: &Path) -> Result<Self, io::Error> {
         let contents = tokio::fs::read(filename).await?;
         serde_json::from_slice(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    }
+
+    pub fn iter<'a>(&'a self) -> JSONTokenIterator<'a> {
+        JSONTokenIterator::new(&self.token_map)
     }
 
     pub fn get<T>(
@@ -255,5 +268,34 @@ impl JSONTokens {
             }
         }
         Ok(())
+    }
+}
+
+pub struct JSONTokenIterator<'a> {
+    data: &'a JSONTokensMap,
+    values: Values<'a, ScopeHash, JSONToken>,
+    iter: u32,
+}
+
+impl<'a> JSONTokenIterator<'a> {
+    fn new(json_tokens: &'a JSONTokensMap) -> JSONTokenIterator<'a> {
+        JSONTokenIterator {
+            data: json_tokens,
+            values: json_tokens.values(),
+            iter: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for JSONTokenIterator<'a> {
+    type Item = &'a JSONToken;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.values.next() {
+            Some(json_token) => {
+                Some(json_token)
+            },
+            None => None
+        }
     }
 }

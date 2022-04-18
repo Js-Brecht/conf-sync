@@ -9,37 +9,62 @@ use yup_oauth2::storage::{
 };
 
 mod json_tokens;
+mod keychain;
 
-use json_tokens::{JSONTokens, ScopeSet};
+use json_tokens::{JSONTokens, ScopeSet, JSONToken};
+use keychain::{Keychain};
 use crate::fs::{open_writeable_file};
 
-// fn get_scope_id(scopes: &[&str]) {
-//     let str_scopes: Vec<&str> = scopes
-//         .iter()
-//         .map(|scope| scope.as_ref())
-//         .sorted()
-//         .unique()
-//         .collect();
-// }
+type TokenCollection = Mutex<JSONTokens>;
 
 #[derive(Clone)]
 pub struct KeychainStorage {
-    tokens: Mutex<JSONTokens>,
-    filename: PathBuf,
+    tokens: TokenCollection,
+    keychain: Keychain,
+    filename: Option<PathBuf>,
 }
 
 impl KeychainStorage {
-    pub async fn new(filename: PathBuf) -> Result<Self, io::Error> {
-        let tokens = match JSONTokens::load_from_file(&filename).await {
+    pub async fn new(filename: Option<PathBuf>) -> Result<Self, io::Error> {
+        let keychain = Keychain::new();
+
+        Ok(KeychainStorage {
+            keychain,
+            filename: None,
+            tokens: Mutex::new(JSONTokens::new()),
+        })
+    }
+
+    pub async fn hydrate_from_file(&mut self, filename: PathBuf) -> Result<Self, io::Error> {
+        let fs_tokens = match JSONTokens::load_from_file(&filename).await {
             Ok(tokens) => tokens,
             Err(e) if e.kind() == io::ErrorKind::NotFound => JSONTokens::new(),
             Err(e) => return Err(e),
         };
 
-        Ok(KeychainStorage {
-            tokens: Mutex::new(tokens),
-            filename,
-        })
+        let mut tokens = self.tokens.lock().await;
+
+        for json_token in fs_tokens.iter() {
+            let scope_set = ScopeSet::from(&json_token.scopes);
+            tokens.set(scope_set, json_token.token.clone()).unwrap();
+        }
+
+        let _ = &self.update_keychain();
+
+        Ok(self.to_owned())
+    }
+
+    pub async fn update_keychain(&self) -> Result<Self, keyring::Error> {
+        let tokens = self.tokens.lock().await;
+
+        for json_token in tokens.iter() {
+            let _ = &self.keychain.update_entry(
+                json_token.hash,
+                json_token
+            )?;
+        }
+
+        Ok(self.to_owned())
     }
 
     async fn set_token<T>(
@@ -50,15 +75,23 @@ impl KeychainStorage {
     where
         T: AsRef<str>,
     {
+        let filename = match &self.filename {
+            Some(fname) => fname,
+            None => return Ok(())
+        };
+
         use tokio::io::AsyncWriteExt;
         let json = {
             use std::ops::Deref;
             let mut lock = self.tokens.lock().await;
             lock.set(scopes, token)?;
             serde_json::to_string(lock.deref())
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                .map_err(
+                    |e| io::Error::new(io::ErrorKind::InvalidData, e)
+                )?
         };
-        let mut f = open_writeable_file(&self.filename).await?;
+
+        let mut f = open_writeable_file(&filename).await?;
         f.write_all(json.as_bytes()).await?;
         Ok(())
     }

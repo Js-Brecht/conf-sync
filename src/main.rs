@@ -8,7 +8,7 @@ use drive3::{Error};
 use drive3::{DriveHub, hyper, hyper_rustls};
 use yup_oauth2::{
     InstalledFlowAuthenticator,
-    InstalledFlowReturnMethod
+    InstalledFlowReturnMethod,
 };
 
 pub mod fs;
@@ -25,10 +25,9 @@ async fn main() {
     let cfg = ConfigHandler::new().await;
     let oauth_config = cfg.oauth_config.clone();
     let app_secret = cfg.get_app_secret();
+    let fs_keystorage_path = cfg.base_paths.data_dir.join("keystorage.json");
 
-    let key_storage = match KeychainStorage::new(
-        cfg.base_paths.data_dir.join("keystorage.json")
-    ).await {
+    let key_storage = match KeychainStorage::new(None).await {
         Ok(storage) => storage,
         Err(err) => {
             panic!("Unable to initialize keychain storage: {}", err);
@@ -39,9 +38,9 @@ async fn main() {
         app_secret,
         InstalledFlowReturnMethod::HTTPRedirect,
     )
-    .with_storage(Box::new(key_storage))
-    .flow_delegate(Box::new(auth::CustomInstalledFlowDelegate))
-    .build().await.unwrap();
+        .with_storage(Box::new(key_storage))
+        .flow_delegate(Box::new(auth::WebLauncherInstallFlowDelegate))
+        .build().await.unwrap();
 
     let hub = DriveHub::new(
         hyper::Client::builder().build(
